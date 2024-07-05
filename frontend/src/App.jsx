@@ -4,7 +4,7 @@ import './App.css'
 import Locations from './Locations'
 import * as React from 'react'
 import Accordion from '@mui/material/Accordion'
-import Button from '@mui/material/Button';
+import Button from '@mui/material/Button'
 import AccordionActions from '@mui/material/AccordionActions'
 import AccordionSummary from '@mui/material/AccordionSummary'
 import AccordionDetails from '@mui/material/AccordionDetails'
@@ -18,30 +18,57 @@ import Pagination from '@mui/material/Pagination'
 import groq from 'groq'
 import AccordionComp from './AccordionComp'
 import {set} from 'sanity'
-import CircularProgress from '@mui/material/CircularProgress';
-
-
+import CircularProgress from '@mui/material/CircularProgress'
 
 function App() {
+
+  // all locations
   const [locations, setLocations] = useState([])
-  const [searchState, setSearchState] = useState()
-  const [searchCity, setSearchCity] = useState()
-  const [numberOfLocations, setNumberOfLocations] = useState(0)
+
+  // search state and city
+  const [searchState, setSearchState] = useState('All')
+  const [searchCity, setSearchCity] = useState('All')
+
+ 
   const [page, setPage] = useState(1)
-  const [totalPage,setTotalPage] = useState(1);
-  const perPage = 2;
+  const [totalPage, setTotalPage] = useState(1)
+
+  // define the number of items per page
+  const perPage = 2
+
   const [loading, setLoading] = useState(false)
 
+  // for dropdown items
   const [states, setStates] = useState([])
   const [cities, setCities] = useState([])
 
+  // first and last id of the fetched locations
+  const [lastId, setLastId] = useState(null)
+  const [firstId, setFirstId] = useState(null)
+
+  // additional query for filtering
+  const [additionalQuery, setAdditionalQuery] = useState('')
+
+  const handleTotalNumberOfPageSet = async () => {
+  
+    const LOCATION_QUERY_All = `count(*[_type == "location" ${additionalQuery}])`
+
+    const fetchedLocationsAll = await sanityFetch({query: LOCATION_QUERY_All})
+ 
+    setTotalPage(Math.ceil(fetchedLocationsAll / perPage))
+    setPage(1)
+  }
+
+  useEffect(() => {
+    handleTotalNumberOfPageSet()
+  }, [additionalQuery])
+
   const handleSetNewLocations = async (fetchedLocations) => {
+    setLoading(true)
     setLocations(fetchedLocations)
-   
     setFirstId(fetchedLocations[0]._id)
     setLastId(fetchedLocations[fetchedLocations.length - 1]._id)
-    setNumberOfLocations(fetchedLocations.length)
-    
+    setLoading(false)
   }
 
   const handleAllStateChange = async () => {
@@ -49,18 +76,15 @@ function App() {
     const LOCATION_QUERY = `*[_type == "location"] | order(_id asc)[0...${perPage}]`
     const fetchedLocations = await sanityFetch({query: LOCATION_QUERY})
     setAdditionalQuery('')
+    setSearchCity('All')
+    setSearchState('All')
     handleSetNewLocations(fetchedLocations)
     setLoading(false)
-    const LOCATION_QUERY_All = `count*([_type == "location"])`
-    const fetchedLocationsAll = await sanityFetch({query: LOCATION_QUERY_All})
-    setTotalPage(Math.ceil(fetchedLocationsAll.length / perPage))
-    
-    // const states = new Set(fetchedLocations.map((location) => location.state))
-    // setStates(Array.from(states))
 
   }
 
   const handleStateChange = async (state) => {
+
     setLoading(true)
     const LOCATION_QUERY = `*[_type == "location" && state == "${state}"] | order(_id asc)[0...${perPage}]`
     setAdditionalQuery(`&& state == "${state}"`)
@@ -69,9 +93,19 @@ function App() {
     setCities(Array.from(cities))
     handleSetNewLocations(fetchedLocations)
     setSearchState(state)
-    handleTotalNumberOfPageSet()
+    
     setLoading(false)
   }
+
+
+  const handleAllCityChange = async () => {
+    const LOCATION_QUERY = `*[_type == "location" && state == "${searchState}"] | order(_id asc)[0...${perPage}]`
+    const fetchedLocations = await sanityFetch({query: LOCATION_QUERY})
+    handleSetNewLocations(fetchedLocations)
+    setAdditionalQuery(`&& state == "${searchState}"`)  
+    setSearchCity('All')
+  }
+
 
   const handleCityChange = async (city) => {
     setLoading(true)
@@ -79,83 +113,66 @@ function App() {
     setAdditionalQuery(`&& city == "${city}"`)
     const fetchedLocations = await sanityFetch({query: LOCATION_QUERY})
     handleSetNewLocations(fetchedLocations)
-    setNumberOfLocations(fetchedLocations.length)
-    setPage(1)
-    handleTotalNumberOfPageSet()
+    setSearchCity(city)
     setLoading(false)
   }
-
-  const [lastId, setLastId] = useState(null)
-  const [firstId, setFirstId] = useState(null)
-  const [additionalQuery, setAdditionalQuery] = useState('')
-
-
 
   const fetchPreviousPage = async () => {
     setLoading(true)
     if (page === 1) {
-      alert('Already on the first page!');
-      return;
+      alert('Already on the first page!')
+      return
     }
-  
-    const previousPage = page - 1;
-    const offset = (previousPage - 1) * perPage;
-  
+
+    const previousPage = page - 1
+    const offset = (previousPage - 1) * perPage
+
     const LOCATION_QUERY = groq`*[_type == "location" ${additionalQuery}] | order(_id asc) [${offset}...${offset + perPage}] {
       _id, name, address, city, state, mapUrl, image, zomato, swiggy, contact, state, timings, createdAt
-    }`;
-  
+    }`
+
     try {
-      const fetchedLocations = await sanityFetch({ query: LOCATION_QUERY });
+      const fetchedLocations = await sanityFetch({query: LOCATION_QUERY})
       if (fetchedLocations.length === 0) {
-        alert('No more locations to fetch');
-        return;
+        alert('No more locations to fetch')
+        return
       }
-  
-      setPage(previousPage);
-      setLocations(fetchedLocations);
+      setPage(previousPage)
+      setLocations(fetchedLocations)
     } catch (error) {
-      console.error('Error fetching previous page:', error);
+      console.error('Error fetching previous page:', error)
     } finally {
       setLoading(false)
     }
-  };
+  }
+
   const fetchNextPage = async () => {
     setLoading(true)
-    const nextPage = page + 1;
-    const offset = (nextPage - 1) * perPage;
-  
+    const nextPage = page + 1
+    const offset = (nextPage - 1) * perPage
     const LOCATION_QUERY = groq`*[_type == "location" ${additionalQuery}] | order(_id asc) [${offset}...${offset + perPage}] {
       _id, name, address, city, state, mapUrl, image, zomato, swiggy, contact, state, timings, createdAt
-    }`;
-  
+    }`
     try {
-      const fetchedLocations = await sanityFetch({ query: LOCATION_QUERY });
+      const fetchedLocations = await sanityFetch({query: LOCATION_QUERY})
       if (fetchedLocations.length === 0) {
-        alert('No more locations to fetch');
-        return;
+        alert('No more locations to fetch')
+        return
       }
-  
-      setPage(nextPage);
-      setLocations(fetchedLocations);
+      setPage(nextPage)
+      setLocations(fetchedLocations)
     } catch (error) {
-      console.error('Error fetching next page:', error);
-    }finally {
+      console.error('Error fetching next page:', error)
+    } finally {
       setLoading(false)
     }
-  };
-  const handleTotalNumberOfPageSet = async () => {
-    const LOCATION_QUERY_All = `count(*[_type == "location" ${additionalQuery}])`;
-    const fetchedLocationsAll = await sanityFetch({query: LOCATION_QUERY_All})
-    setTotalPage(Math.ceil(fetchedLocationsAll / perPage))
   }
 
 
-  useEffect(() => {
+  // useEffect(() => {
+  //   handleTotalNumberOfPageSet()
+  // }, [ searchState, searchCity, page])
 
-  
-    handleTotalNumberOfPageSet()
-  }, [additionalQuery])
 
   useEffect(() => {
     const LOCATION_QUERY = `*[_type == "location"] | order(_id asc)[0...${perPage}]`
@@ -163,8 +180,8 @@ function App() {
       setLoading(true)
       const fetchedLocations = await sanityFetch({query: LOCATION_QUERY})
       handleSetNewLocations(fetchedLocations)
-      
-      const LOCATION_QUERY_All = `count(*[_type == "location" ${additionalQuery}])`;
+
+      const LOCATION_QUERY_All = `count(*[_type == "location" ${additionalQuery}])`
       const fetchedLocationsAll = await sanityFetch({query: LOCATION_QUERY_All})
       setTotalPage(Math.ceil(fetchedLocationsAll / perPage))
       const states = new Set(fetchedLocations.map((location) => location.state))
@@ -174,15 +191,7 @@ function App() {
     fetchAllLocations()
   }, [])
 
-  const handleAllCityChange = async () => {
-    const LOCATION_QUERY = `*[_type == "location" && state == "${searchState}"] | order(_id asc)[0...${perPage}]`
-    const fetchedLocations = await sanityFetch({query: LOCATION_QUERY})
-    handleSetNewLocations(fetchedLocations)
-  }
 
-  const handlePageChange = (event, value) => {
-    console.log('handle page change called')
-  }
 
   return (
     <>
@@ -194,9 +203,10 @@ function App() {
           sx={{my: 2, width: '90%', backgroundColor: '#f5f5f5', textAlign: 'left'}}
           id="outlined-basic"
           label="Search for State"
+          value={searchState}
           variant="outlined"
         >
-          <MenuItem onClick={() => handleAllStateChange()}>All</MenuItem>
+          <MenuItem value={"All"} onClick={() => handleAllStateChange()}>All</MenuItem>
           {states &&
             states.map((option, index) => (
               <MenuItem onClick={() => handleStateChange(option)} key={index} value={option}>
@@ -205,15 +215,16 @@ function App() {
             ))}
         </TextField>
         <TextField
-        disabled={!searchState}
+          disabled={!searchState || searchState === 'All'}
           select
+          value={searchCity}
           size="small"
           sx={{mx: 2, my: 2, width: '90%', backgroundColor: '#f5f5f5', textAlign: 'left'}}
           id="outlined-basic"
           label="Search for City"
           variant="outlined"
         >
-          <MenuItem onClick={() => handleAllCityChange()}>All</MenuItem>
+          <MenuItem value={"All"} onClick={() => handleAllCityChange()}>All</MenuItem>
           {cities &&
             cities.map((option, index) => (
               <MenuItem onClick={() => handleCityChange(option)} key={index} value={option}>
@@ -223,13 +234,15 @@ function App() {
         </TextField>
       </div>
 
-{loading && (       <Box sx={{ display: 'flex',width:"100%",justifyContent:"center",padding:"80px 0" }}>
-      <CircularProgress />
-    </Box>)}
-
+      {loading && (
+        <Box sx={{display: 'flex', width: '100%', justifyContent: 'center', padding: '80px 0'}}>
+          <CircularProgress />
+        </Box>
+      )}
 
       <div style={{textAlign: 'left'}}>
-        {locations && !loading &&
+        {locations &&
+          !loading &&
           locations.map((location, index) => (
             <Accordion key={index} style={{background: '#F5F5F5 ', marginBottom: '20px'}}>
               <AccordionSummary
@@ -238,7 +251,7 @@ function App() {
                 id="panel3-header"
               >
                 <div style={{display: 'flex'}}>
-                  <img style={{marginRight:"20px"}} src={urlFor(location.image).width(140).url()}></img>
+               
                   <div>
                     <p style={{fontWeight: 'bold', marginBottom: '8px'}}>
                       {location.name} | {location?.state} ( {location?.city}){' '}
@@ -283,13 +296,32 @@ function App() {
             </Accordion>
           ))}
 
-   
-
-        {!loading && (<>      <div style={{display:"flex", justifyContent:"space-between",alignItems:"center"}}>
-        <Button disabled={page == 1} variant="contained" color="success" onClick={fetchPreviousPage}>Fetch Previous Page</Button>
-        <p>Page {page} of {totalPage} Pages</p>
-        <Button disabled={page == totalPage} variant="contained" color="success" onClick={fetchNextPage}>Fetch Next Page</Button>
-        </div></>)}
+        {!loading && (
+          <>
+            {' '}
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <Button
+                disabled={page == 1}
+                variant="contained"
+                color="success"
+                onClick={fetchPreviousPage}
+              >
+                Fetch Previous Page
+              </Button>
+              <p>
+                Page {page} of {totalPage} Pages
+              </p>
+              <Button
+                disabled={page == totalPage}
+                variant="contained"
+                color="success"
+                onClick={fetchNextPage}
+              >
+                Fetch Next Page
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </>
   )
